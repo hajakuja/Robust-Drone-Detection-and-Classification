@@ -27,19 +27,37 @@ power_spec = np.log10(np.sqrt(spectrogram_2d[0,:,:]**2 + spectrogram_2d[1,:,:]**
 `train_model_cv5.py` trains a VGG11_BN on the dataset using 5-fold cross-validation. The script saves the model and the training history in a subfolder `results/experiments/experiment_name`. I.e. training a VGG11_BN for 50 epochs with start learning rate 0.005 and batch size 8 ->
 `results/experiments/vgg11_bn_CV5_epochs50_lr0.005_batchsize8`
 
-
 To train the model, run the following command:
 ```bash
 python train_model_cv5.py
 ```
 
+Training one epoch of the dataset takes about 5 minutes for a VGG11_BN on a single NVIDIA A100.
 
+Results for each fold are stored as a dictionary in a pickle file (`results_foldN.pkl`). The dictionary contains the following keys:
+- `train_weighted_acc`: weighted accuracy on the training set
+- `train_acc`: accuracy on the training set
+- `train_loss`: loss on the training set
+- `val_weighted_acc`: weighted accuracy on the validation set
+- `val_acc`: accuracy on the validation set
+- `val_loss`: loss on the validation set
+- `best_epoch`: epoch with the best validation accuracy
+- `test_acc`: accuracy on the test set
+- `test_weighted_acc`: weighted accuracy on the test set
+- `test_predictions`: predictions on the test set
+- `test_targets`: targets on the test set
+- `test_snrs`: SNRs on the test set
+- `class_names`: class names
+- `train_idx`: indices of the training set
+- `val_idx`: indices of the validation set
+- `test_idx`: indices of the test set
 
-Training one epoch off the dataset takes about 5 minutes for a VGG11_BN on a single NVIDIA A100.
+The respective model is stored in a separate file `model_foldN.pth`. Furhtermore, the training/validation loss, accuracy and weighted accuracy are plotted and stored in a file, e.g. `plots/results_foldloss_foldN.png`.
+
+## Evaluate the model
+
 
 ## Related Literature
-Further information about the data, and how to build a classifier, can be found in our related manuscript. Please cite it if you find it useful.
-
 S. Glüge, M. Nyfeler, A. Aghaebrahimian, N. Ramagnano and C. Schüpbach, "Robust Low-Cost Drone Detection and Classification Using Convolutional Neural Networks in Low SNR Environments," in IEEE Journal of Radio Frequency Identification, vol. 8, pp. 821-830, 2024, doi: [10.1109/JRFID.2024.3487303](https://doi.org/10.1109/JRFID.2024.3487303)
 
 ```
