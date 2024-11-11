@@ -52,10 +52,37 @@ Results for each fold are stored as a dictionary in a pickle file (`results_fold
 - `val_idx`: indices of the validation set
 - `test_idx`: indices of the test set
 
-The respective model is stored in a separate file `model_foldN.pth`. Furhtermore, the training/validation loss, accuracy and weighted accuracy are plotted and stored in a file, e.g. `plots/results_foldloss_foldN.png`.
+The respective model is stored in a separate file `model_foldN.pth`. Furhtermore, the training/validation loss, accuracy and weighted accuracy are plotted and stored in a file, e.g. `plots/weighted_acc_foldN.png`.
 
-## Evaluate the model
+![weigthed_acc_fold0.png](doc/img/weigthed_acc_fold0.png)
 
+## Evaluate the model on diffrent SNR levels
+`eval_model_with_cm_per_SNR_cv5.py` evaluates the model predeictions according to diffrent SNR levels. The script saves the confusion matrix and the classification report in a subfolder `results/experiments/vgg11_bn_CV5_epochs50_lr0.005_batchsize8`. I.e. evaluating the model for the VGG11_BN trained in the previous step. The plots of the confusion matrix are stored in a subfolder `plots/foldN/`. For instance `cm_SNR-14.png` shows the confusion matrix for the SNR level -14 dB.
+
+![cm_SNR-14.png](doc/img/cm_SNR-14.0.png)
+
+The classification report for all SNR levels is stored as `acc.csv` in the same folder.
+
+| fold | accuracy train | accuracy test | weighted accuracy train | weighted accuracy test | best_epoch |
+|------|----------------|---------------|-------------------------|------------------------|------------|
+| 0    | 0.9469003081321716 | 0.930402934551239 | 0.9466673135757446 | 0.9268965125083923 | 49         |
+| 1    | 0.9582599401473999 | 0.9467455744743347 | 0.9585657119750977 | 0.927419126033783 | 39         |
+| 2    | 0.9400317072868347 | 0.9464637637138367 | 0.939556360244751 | 0.9236124753952026 | 24         |
+| 3    | 0.9486615061759949 | 0.9405466318130493 | 0.9485337734222412 | 0.9301179051399231 | 46         |
+| 4    | 0.9581719040870667 | 0.9481543898582458 | 0.9575132131576538 | 0.9338380098342896 | 43         |
+| mean | 0.9504050731658935 | 0.9424626588821411 | 0.9501672744750976 | 0.9283768057823181 | 40.2       |
+| std  | 0.006999324557497465 | 0.006570481230705516 | 0.007099381949997308 | 0.0034253011367031045 | 8.749857141690944 |
+
+The accuracy per SNR level is stored in a file `acc_per_SNR.csv` in the same folder.
+
+## Tensorboard
+During training several metrics are logged to tensorboard. To start tensorboard run the following command:
+```bash
+tensorboard --logdir results/experiments/vgg11_bn_CV5_epochs50_lr0.005_batchsize8
+```
+Then open a browser and navigate to `localhost:6006` to see the training progress.
+
+![tensorboard.png](doc/img/tensorboard.png)
 
 ## Related Literature
 S. Glüge, M. Nyfeler, A. Aghaebrahimian, N. Ramagnano and C. Schüpbach, "Robust Low-Cost Drone Detection and Classification Using Convolutional Neural Networks in Low SNR Environments," in IEEE Journal of Radio Frequency Identification, vol. 8, pp. 821-830, 2024, doi: [10.1109/JRFID.2024.3487303](https://doi.org/10.1109/JRFID.2024.3487303)
@@ -72,3 +99,6 @@ S. Glüge, M. Nyfeler, A. Aghaebrahimian, N. Ramagnano and C. Schüpbach, "Robus
   doi={10.1109/JRFID.2024.3487303}
 }
 ```
+
+## Trained models
+You can download the models and evaluation results from the experiment above from [here]().

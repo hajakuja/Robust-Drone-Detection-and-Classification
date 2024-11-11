@@ -6,6 +6,7 @@ import pickle as pkl
 from sklearn.metrics import confusion_matrix, accuracy_score, balanced_accuracy_score
 import os
 
+
 def plot_cm_plus_class_dist(df_cm, target_class_stats_df, plt_title, plt_filename=None):
     fig = plt.figure(figsize=(12, 9))
     ax = fig.add_gridspec(4, 4)
@@ -125,7 +126,7 @@ for fold in range(num_folds):
     eval_weighted_acc = exp_result_dict['test_weighted_acc']
     best_epoch = exp_result_dict['best_epoch']
     
-    # find best epoch
+    # get best epoch
     train_acc = exp_result_dict['train_acc'][best_epoch]
     train_weighted_acc = exp_result_dict['train_weighted_acc'][best_epoch]
 
