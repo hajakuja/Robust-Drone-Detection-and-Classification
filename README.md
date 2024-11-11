@@ -101,4 +101,4 @@ S. Glüge, M. Nyfeler, A. Aghaebrahimian, N. Ramagnano and C. Schüpbach, "Robus
 ```
 
 ## Trained models
-You can download the models and evaluation results from the experiment above from [here]().
+You can download the models and evaluation results from the experiment above from [Zenodo](https://zenodo.org/records/14065652).
