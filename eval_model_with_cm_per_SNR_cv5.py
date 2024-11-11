@@ -70,9 +70,7 @@ def plot_cm_plus_class_dist(df_cm, target_class_stats_df, plt_title, plt_filenam
 
 project_path = './'
 result_path = project_path + 'results/experiments/'
-# data_path = './data/'
-data_path = '/data/glue/drones/preprocessed/iq_and_spec/long/sigfreq_2440_samplefreq_14_inputlength_1048576_normsignal_carrier_normnoise_mean_movavgwinsize_256/'
-
+data_path = './data/'
 
 # global params (defines the experiment to evaluate)
 num_workers = 0 

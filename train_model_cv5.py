@@ -380,8 +380,7 @@ def eval_model_spec(model, num_classes, data_loader):
 
 project_path = './'
 result_path = project_path + 'results/experiments/'
-# data_path = './data/'
-data_path = '/data/glue/drones/preprocessed/iq_and_spec/long/sigfreq_2440_samplefreq_14_inputlength_1048576_normsignal_carrier_normnoise_mean_movavgwinsize_256/'
+data_path = './data/'
 
 # global params
 num_workers = 0 # number of workers for data loader
