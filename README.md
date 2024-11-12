@@ -3,7 +3,6 @@ Code to reproduce the experiments from the paper:
 
 S. Glüge, M. Nyfeler, A. Aghaebrahimian, N. Ramagnano and C. Schüpbach, "Robust Low-Cost Drone Detection and Classification Using Convolutional Neural Networks in Low SNR Environments," in IEEE Journal of Radio Frequency Identification, vol. 8, pp. 821-830, 2024, doi: [10.1109/JRFID.2024.3487303](https://doi.org/10.1109/JRFID.2024.3487303)
 
-
 ## Dataset
 The dataset is available at [kaggle](https://www.kaggle.com/datasets/sgluege/noisy-drone-rf-signal-classification-v2). Download the dataset and place it in a subfolder `data/`. 
 
@@ -56,7 +55,7 @@ The respective model is stored in a separate file `model_foldN.pth`. Furhtermore
 
 ![weigthed_acc_fold0.png](doc/img/weigthed_acc_fold0.png)
 
-## Evaluate the model on diffrent SNR levels
+## Evaluate the model on different SNR levels
 `eval_model_with_cm_per_SNR_cv5.py` evaluates the model predeictions according to diffrent SNR levels. The script saves the confusion matrix and the classification report in a subfolder `results/experiments/vgg11_bn_CV5_epochs50_lr0.005_batchsize8`. I.e. evaluating the model for the VGG11_BN trained in the previous step. The plots of the confusion matrix are stored in a subfolder `plots/foldN/`. For instance `cm_SNR-14.png` shows the confusion matrix for the SNR level -14 dB.
 
 ![cm_SNR-14.png](doc/img/cm_SNR-14.0.png)
@@ -102,3 +101,15 @@ S. Glüge, M. Nyfeler, A. Aghaebrahimian, N. Ramagnano and C. Schüpbach, "Robus
 
 ## Trained models
 You can download the models and evaluation results from the experiment above from [Zenodo](https://zenodo.org/records/14065652).
+
+## Python environment
+The code was tested with Python 3.12.4 and the following packages:
+- matplotlib==3.9.2
+- numpy==2.1.3
+- pandas==2.2.3
+- scikit_learn==1.5.2
+- scipy==1.14.1
+- torch==2.4.0+cu124
+- torchaudio==2.4.0+cu124
+- torchmetrics==1.4.0.post0
+- tqdm==4.66.4
