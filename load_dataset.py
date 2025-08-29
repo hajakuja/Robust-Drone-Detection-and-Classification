@@ -204,48 +204,49 @@ def plot_input_data_powerspec(spectrogram_2d, iq_2d, title='', n_fft=1024, win_l
     plt.show()
 
 
-project_path = './'
-# data_path = './data/'
-data_path = '/data/glue/drones/preprocessed/iq_and_spec/long/sigfreq_2440_samplefreq_14_inputlength_1048576_normsignal_carrier_normnoise_mean_movavgwinsize_256/'
+if __name__ == "__main__":
+    project_path = './'
+    # data_path = './data/'
+    data_path = '/data/glue/drones/preprocessed/iq_and_spec/long/sigfreq_2440_samplefreq_14_inputlength_1048576_normsignal_carrier_normnoise_mean_movavgwinsize_256/'
 
-# read statistics/class count of the dataset
-dataset_stats = pd.read_csv(data_path + 'class_stats.csv', index_col=0)
-class_names = dataset_stats['class'].values
+    # read statistics/class count of the dataset
+    dataset_stats = pd.read_csv(data_path + 'class_stats.csv', index_col=0)
+    class_names = dataset_stats['class'].values
 
-# read SNR count of the dataset
-snr_stats = pd.read_csv(data_path + 'SNR_stats.csv', index_col=0)
-snr_list = snr_stats['SNR'].values
+    # read SNR count of the dataset
+    snr_stats = pd.read_csv(data_path + 'SNR_stats.csv', index_col=0)
+    snr_list = snr_stats['SNR'].values
 
-# set device
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-# device = torch.device('cpu')
+    # set device
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cpu')
 
-# setup transform: IQ -> SPEC
-data_transform = transform_spectrogram(device=device) # create transform object
-# data_transform.to(device=device, dtype=torch.float32) # put transform on GPU (if available)
-# create dataset object
-drone_dataset = drone_data_dataset(path=data_path, device=device, transform=data_transform)
+    # setup transform: IQ -> SPEC
+    data_transform = transform_spectrogram(device=device) # create transform object
+    # data_transform.to(device=device, dtype=torch.float32) # put transform on GPU (if available)
+    # create dataset object
+    drone_dataset = drone_data_dataset(path=data_path, device=device, transform=data_transform)
 
-# split data with stratified kfold
-dataset_indices = list(range(len(drone_dataset)))
+    # split data with stratified kfold
+    dataset_indices = list(range(len(drone_dataset)))
 
-# get targets, snrs and files of the dataset
-targets = drone_dataset.get_targets()
-snr_list = drone_dataset.get_snrs()
-files = drone_dataset.get_files()
+    # get targets, snrs and files of the dataset
+    targets = drone_dataset.get_targets()
+    snr_list = drone_dataset.get_snrs()
+    files = drone_dataset.get_files()
 
-# get sample from the dataset
-iq_data, target, snr, sample_id, transformed_data = drone_dataset[9276]
+    # get sample from the dataset
+    iq_data, target, snr, sample_id, transformed_data = drone_dataset[9276]
 
-print(transformed_data.shape)
+    print(transformed_data.shape)
 
-# plot IQ data
-target_name = class_names[target]
-plot_title = 'Sample ID: ' + str(sample_id) + ', Class: ' + target_name + ', SNR: ' + str(snr.numpy()) + 'dB'
-print(plot_title)
-# plot_two_channel_iq(iq_data.cpu().numpy(), title=plot_title)
-# plot_two_channel_spectrogram(transformed_data.cpu().numpy(), title=plot_title)
-# plot_input_data(spectrogram_2d=transformed_data.cpu().numpy(),
-#                 iq_2d=iq_data.cpu().numpy(), title=plot_title)
-# plot_log_prower_spec(spectrogram_2d=transformed_data.cpu().numpy(), n_fft=1024, sampling_rate=14e6, title=plot_title)
-plot_input_data_powerspec(spectrogram_2d=transformed_data.cpu().numpy(), iq_2d=iq_data.cpu().numpy(), title=plot_title)
+    # plot IQ data
+    target_name = class_names[target]
+    plot_title = 'Sample ID: ' + str(sample_id) + ', Class: ' + target_name + ', SNR: ' + str(snr.numpy()) + 'dB'
+    print(plot_title)
+    # plot_two_channel_iq(iq_data.cpu().numpy(), title=plot_title)
+    # plot_two_channel_spectrogram(transformed_data.cpu().numpy(), title=plot_title)
+    # plot_input_data(spectrogram_2d=transformed_data.cpu().numpy(),
+    #                 iq_2d=iq_data.cpu().numpy(), title=plot_title)
+    # plot_log_prower_spec(spectrogram_2d=transformed_data.cpu().numpy(), n_fft=1024, sampling_rate=14e6, title=plot_title)
+    plot_input_data_powerspec(spectrogram_2d=transformed_data.cpu().numpy(), iq_2d=iq_data.cpu().numpy(), title=plot_title)
