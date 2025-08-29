@@ -4,6 +4,15 @@ import torch
 from lib import model_VGG2D
 from load_dataset import transform_spectrogram
 
+torch.serialization.add_safe_globals([model_VGG2D.VGG])
+torch.serialization.add_safe_globals([torch.nn.modules.container.Sequential])
+torch.serialization.add_safe_globals([torch.nn.modules.conv.Conv2d])
+torch.serialization.add_safe_globals([torch.nn.modules.batchnorm.BatchNorm2d])
+torch.serialization.add_safe_globals([torch.nn.modules.activation.ReLU])
+torch.serialization.add_safe_globals([torch.nn.modules.pooling.MaxPool2d])
+torch.serialization.add_safe_globals([torch.nn.modules.pooling.AdaptiveAvgPool2d])
+torch.serialization.add_safe_globals([torch.nn.modules.linear.Linear])
+torch.serialization.add_safe_globals([torch.nn.modules.dropout.Dropout])
 
 def load_iq_from_file(path: str) -> torch.Tensor:
     """Load IQ samples from a .npy or .pt file."""
@@ -56,7 +65,11 @@ def main() -> None:
 
     model = model_VGG2D.vgg11_bn(num_classes=args.num_classes)
     state = torch.load(args.weights, map_location=args.device)
-    model.load_state_dict(state)
+    if isinstance(state, torch.nn.Module):
+            state_dict = state.state_dict()
+    else:
+            state_dict = state.get("state_dict", state)
+    model.load_state_dict(state_dict)
     model.to(args.device)
     model.eval()
 
