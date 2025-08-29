@@ -104,6 +104,10 @@ def main() -> None:
             )
 
     model = model_VGG2D.vgg11_bn(num_classes=num_classes)
+    if isinstance(state, torch.nn.Module):
+            state_dict = state.state_dict()
+    else:
+            state_dict = state.get("state_dict", state)
     model.load_state_dict(state_dict)
     model.to(args.device)
     model.eval()
