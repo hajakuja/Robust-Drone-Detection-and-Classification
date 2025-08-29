@@ -53,7 +53,15 @@ def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> t
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run model inference on SDR or file input")
     parser.add_argument("--weights", required=True, help="Path to model weights (.pth)")
-    parser.add_argument("--num_classes", type=int, required=True, help="Number of output classes")
+    parser.add_argument(
+        "--num_classes",
+        type=int,
+        default=None,
+        help=(
+            "Number of output classes. "
+            "If omitted, the value is inferred from the checkpoint"
+        ),
+    )
     parser.add_argument("--source", choices=["sdr", "file"], required=True, help="Input source")
     parser.add_argument("--file", help="Path to IQ file (.npy or .pt)")
     parser.add_argument("--num_samps", type=int, default=1024*1024, help="Number of IQ samples to capture")
@@ -63,9 +71,35 @@ def main() -> None:
     parser.add_argument("--device", default="cpu", help="Computation device")
     args = parser.parse_args()
 
-    model = model_VGG2D.vgg11_bn(num_classes=args.num_classes)
     state = torch.load(args.weights, map_location=args.device)
-    if isinstance(state, torch.nn.Module):
+
+
+    # Infer the number of classes from the checkpoint if not provided
+    if args.num_classes is None:
+        if "classifier.3.weight" in state:
+            num_classes = state["classifier.3.weight"].shape[0]
+        elif "module.classifier.3.weight" in state:
+            num_classes = state["module.classifier.3.weight"].shape[0]
+        else:
+            raise KeyError(
+                "Could not determine number of classes from checkpoint. "
+                "Please provide --num_classes."
+            )
+    else:
+        num_classes = args.num_classes
+        ckpt_classes = None
+        if "classifier.3.weight" in state:
+            ckpt_classes = state["classifier.3.weight"].shape[0]
+        elif "module.classifier.3.weight" in state:
+            ckpt_classes = state["module.classifier.3.weight"].shape[0]
+        if ckpt_classes is not None and ckpt_classes != num_classes:
+            raise RuntimeError(
+                f"Checkpoint expects {ckpt_classes} classes, "
+                f"but --num_classes={num_classes}"
+            )
+
+    model = model_VGG2D.vgg11_bn(num_classes=num_classes)
+        if isinstance(state, torch.nn.Module):
             state_dict = state.state_dict()
     else:
             state_dict = state.get("state_dict", state)
