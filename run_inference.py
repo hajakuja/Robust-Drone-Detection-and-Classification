@@ -73,13 +73,18 @@ def main() -> None:
 
     state = torch.load(args.weights, map_location=args.device)
 
+    # Convert checkpoint to a state_dict regardless of how it was saved
+    if isinstance(state, torch.nn.Module):
+        state_dict = state.state_dict()
+    else:
+        state_dict = state.get("state_dict", state)
 
     # Infer the number of classes from the checkpoint if not provided
     if args.num_classes is None:
-        if "classifier.3.weight" in state:
-            num_classes = state["classifier.3.weight"].shape[0]
-        elif "module.classifier.3.weight" in state:
-            num_classes = state["module.classifier.3.weight"].shape[0]
+        if "classifier.3.weight" in state_dict:
+            num_classes = state_dict["classifier.3.weight"].shape[0]
+        elif "module.classifier.3.weight" in state_dict:
+            num_classes = state_dict["module.classifier.3.weight"].shape[0]
         else:
             raise KeyError(
                 "Could not determine number of classes from checkpoint. "
@@ -88,10 +93,10 @@ def main() -> None:
     else:
         num_classes = args.num_classes
         ckpt_classes = None
-        if "classifier.3.weight" in state:
-            ckpt_classes = state["classifier.3.weight"].shape[0]
-        elif "module.classifier.3.weight" in state:
-            ckpt_classes = state["module.classifier.3.weight"].shape[0]
+        if "classifier.3.weight" in state_dict:
+            ckpt_classes = state_dict["classifier.3.weight"].shape[0]
+        elif "module.classifier.3.weight" in state_dict:
+            ckpt_classes = state_dict["module.classifier.3.weight"].shape[0]
         if ckpt_classes is not None and ckpt_classes != num_classes:
             raise RuntimeError(
                 f"Checkpoint expects {ckpt_classes} classes, "
@@ -99,10 +104,6 @@ def main() -> None:
             )
 
     model = model_VGG2D.vgg11_bn(num_classes=num_classes)
-        if isinstance(state, torch.nn.Module):
-            state_dict = state.state_dict()
-    else:
-            state_dict = state.get("state_dict", state)
     model.load_state_dict(state_dict)
     model.to(args.device)
     model.eval()
