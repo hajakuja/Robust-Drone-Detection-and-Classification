@@ -15,22 +15,36 @@ torch.serialization.add_safe_globals([torch.nn.modules.linear.Linear])
 torch.serialization.add_safe_globals([torch.nn.modules.dropout.Dropout])
 
 def load_iq_from_file(path: str) -> torch.Tensor:
-    """Load IQ samples from a .npy or .pt file."""
+    """Load IQ samples from a ``.npy`` or ``.pt`` file.
+
+    The expected output format is a ``(2, N)`` float tensor where the first
+    row contains the real part and the second row contains the imaginary part
+    of the IQ signal.  Files that store complex values as a 1-D array are
+    converted to this representation before being returned.
+    """
+
+    # Load numpy array or torch tensor from disk
     if path.endswith(".npy"):
         iq_np = np.load(path)
     elif path.endswith(".pt"):
         data = torch.load(path)
         if isinstance(data, dict) and "x_iq" in data:
             tensor = data["x_iq"]
-            if torch.is_tensor(tensor):
-                iq_np = tensor.cpu().numpy()
-            else:
-                iq_np = np.asarray(tensor)
+            iq_np = tensor.cpu().numpy() if torch.is_tensor(tensor) else np.asarray(tensor)
         else:
             iq_np = data if isinstance(data, np.ndarray) else np.asarray(data)
     else:
         raise ValueError("Unsupported file format: expected .npy or .pt")
-    return torch.from_numpy(iq_np).float()
+
+    # ``iq_np`` might be complex or have shape ``(N, 2)`` – normalise to ``(2, N)``
+    if np.iscomplexobj(iq_np):
+        iq_np = np.vstack((iq_np.real, iq_np.imag))
+    elif iq_np.ndim == 2 and iq_np.shape[0] != 2 and iq_np.shape[1] == 2:
+        iq_np = iq_np.T
+    elif iq_np.ndim == 1:
+        raise ValueError("IQ data must be complex or a (2, N) array")
+
+    return torch.from_numpy(iq_np.astype(np.float32))
 
 
 def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> torch.Tensor:
