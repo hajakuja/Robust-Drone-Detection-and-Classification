@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import torch
+import torch.nn.functional as F
 from lib import model_VGG2D
 from load_dataset import transform_spectrogram
 
@@ -47,6 +48,60 @@ def load_iq_from_file(path: str) -> torch.Tensor:
     return torch.from_numpy(iq_np.astype(np.float32))
 
 
+def iq_chunks_from_file(path: str, chunk_size: int):
+    """Yield IQ samples from ``path`` in chunks of ``chunk_size`` samples.
+
+    The returned tensors have shape ``(2, chunk_size)``. For ``.npy`` files the
+    array is memory-mapped so only the processed chunk is loaded into RAM. When
+    the final chunk is shorter than ``chunk_size`` it is zero-padded on the
+    right so that every yielded tensor has the same length.
+    """
+
+    if path.endswith(".npy"):
+        iq_np = np.load(path, mmap_mode="r")
+        if np.iscomplexobj(iq_np):
+            total = iq_np.shape[0]
+            for start in range(0, total, chunk_size):
+                end = min(start + chunk_size, total)
+                chunk = np.vstack((iq_np[start:end].real, iq_np[start:end].imag))
+                if end - start < chunk_size:
+                    pad = ((0, 0), (0, chunk_size - (end - start)))
+                    chunk = np.pad(chunk, pad)
+                yield torch.from_numpy(chunk.astype(np.float32))
+        else:
+            if iq_np.ndim == 2 and iq_np.shape[0] == 2:
+                total = iq_np.shape[1]
+                for start in range(0, total, chunk_size):
+                    end = min(start + chunk_size, total)
+                    chunk = iq_np[:, start:end]
+                    if end - start < chunk_size:
+                        pad = ((0, 0), (0, chunk_size - (end - start)))
+                        chunk = np.pad(chunk, pad)
+                    yield torch.from_numpy(chunk.astype(np.float32))
+            elif iq_np.ndim == 2 and iq_np.shape[1] == 2:
+                total = iq_np.shape[0]
+                for start in range(0, total, chunk_size):
+                    end = min(start + chunk_size, total)
+                    chunk = iq_np[start:end].T
+                    if end - start < chunk_size:
+                        pad = ((0, 0), (0, chunk_size - (end - start)))
+                        chunk = np.pad(chunk, pad)
+                    yield torch.from_numpy(chunk.astype(np.float32))
+            else:
+                raise ValueError("Unsupported IQ array shape in npy file")
+    elif path.endswith(".pt"):
+        iq = load_iq_from_file(path)
+        total = iq.shape[1]
+        for start in range(0, total, chunk_size):
+            end = min(start + chunk_size, total)
+            chunk = iq[:, start:end]
+            if end - start < chunk_size:
+                chunk = F.pad(chunk, (0, chunk_size - (end - start)))
+            yield chunk
+    else:
+        raise ValueError("Unsupported file format: expected .npy or .pt")
+
+
 def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> torch.Tensor:
     """Capture IQ samples from a UHD-compatible SDR."""
     import uhd
@@ -79,6 +134,12 @@ def main() -> None:
     parser.add_argument("--source", choices=["sdr", "file"], required=True, help="Input source")
     parser.add_argument("--file", help="Path to IQ file (.npy or .pt)")
     parser.add_argument("--num_samps", type=int, default=1024*1024, help="Number of IQ samples to capture")
+    parser.add_argument(
+        "--chunk_size",
+        type=int,
+        default=1024 * 1024,
+        help="Number of IQ samples per inference chunk when reading from a file",
+    )
     parser.add_argument("--rate", type=float, default=14e6, help="SDR sample rate")
     parser.add_argument("--freq", type=float, default=2.4e9, help="SDR center frequency")
     parser.add_argument("--gain", type=float, default=0.0, help="SDR gain")
@@ -131,20 +192,22 @@ def main() -> None:
     if args.source == "file":
         if not args.file:
             raise ValueError("--file path required when source is 'file'")
-        iq = load_iq_from_file(args.file)
+        iq_iter = iq_chunks_from_file(args.file, args.chunk_size)
     else:
-        iq = capture_from_sdr(args.num_samps, args.rate, args.freq, args.gain)
+        iq_full = capture_from_sdr(args.num_samps, args.rate, args.freq, args.gain)
+        iq_iter = [iq_full]
 
-    iq = iq.to(args.device)
-    spec = transform(iq).unsqueeze(0)  # (1, 2, 1024, 1024)
+    for i, iq in enumerate(iq_iter):
+        iq = iq.to(args.device)
+        spec = transform(iq).unsqueeze(0)  # (1, 2, 1024, 1024)
 
-    with torch.no_grad():
-        logits = model(spec)
-        pred_idx = logits.argmax(1).item()
-        probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
+        with torch.no_grad():
+            logits = model(spec)
+            pred_idx = logits.argmax(1).item()
+            probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
 
-    print(f"Prediction index: {pred_idx}")
-    print("Probabilities:", probs)
+        print(f"Chunk {i}: Prediction index: {pred_idx}")
+        print("Probabilities:", probs)
 
 
 if __name__ == "__main__":
