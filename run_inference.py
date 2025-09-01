@@ -124,22 +124,49 @@ def iq_chunks_from_file(path: str, chunk_size: int):
 
 
 def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> torch.Tensor:
-    """Capture IQ samples from a UHD-compatible SDR."""
+    """Capture IQ samples from a UHD-compatible SDR.
+
+    Previously the function issued a single ``recv`` call without first
+    starting the stream.  On some devices this resulted in zero samples
+    being returned, which later caused spectrogram generation to fail.  The
+    revised implementation explicitly issues a stream command and keeps
+    receiving until either the requested number of samples has been
+    collected or the radio stops producing data.
+    """
+
     import uhd
+
+    # Configure the device
     usrp = uhd.usrp.MultiUSRP()
     usrp.set_rx_rate(rate)
     usrp.set_rx_freq(uhd.libpyuhd.types.tune_request(freq))
     usrp.set_rx_gain(gain)
 
+    # Create the RX stream
     stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
     rx_stream = usrp.get_rx_stream(stream_args)
     md = uhd.types.RXMetadata()
-    buff = np.zeros((num_samps,), dtype=np.complex64)
+    buff = np.empty((num_samps,), dtype=np.complex64)
     timeout = num_samps / rate + 0.1
-    num_rx_samps = rx_stream.recv([buff], md, timeout=timeout)
-    if num_rx_samps != num_samps:
-        buff = buff[:num_rx_samps]
-    iq_np = np.vstack((buff.real, buff.imag))
+
+    # Start streaming the requested number of samples
+    stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.num_done)
+    stream_cmd.num_samps = num_samps
+    stream_cmd.stream_now = True
+    rx_stream.issue_stream_cmd(stream_cmd)
+
+    total_samps = 0
+    while total_samps < num_samps:
+        view = buff[total_samps:]
+        num_rx_samps = rx_stream.recv(view, md, timeout=timeout)
+        if num_rx_samps <= 0:
+            break
+        total_samps += num_rx_samps
+
+    if total_samps == 0:
+        raise RuntimeError("No samples received from SDR")
+
+    iq_np = np.vstack((buff[:total_samps].real, buff[:total_samps].imag))
     return torch.from_numpy(iq_np).float()
 
 
