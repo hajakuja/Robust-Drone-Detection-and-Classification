@@ -135,7 +135,10 @@ def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> t
     rx_stream = usrp.get_rx_stream(stream_args)
     md = uhd.types.RXMetadata()
     buff = np.zeros((num_samps,), dtype=np.complex64)
-    rx_stream.recv([buff], num_samps, md)
+    timeout = num_samps / rate + 0.1
+    num_rx_samps = rx_stream.recv([buff], md, timeout=timeout)
+    if num_rx_samps != num_samps:
+        buff = buff[:num_rx_samps]
     iq_np = np.vstack((buff.real, buff.imag))
     return torch.from_numpy(iq_np).float()
 
