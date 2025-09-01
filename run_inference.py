@@ -16,12 +16,14 @@ torch.serialization.add_safe_globals([torch.nn.modules.linear.Linear])
 torch.serialization.add_safe_globals([torch.nn.modules.dropout.Dropout])
 
 def load_iq_from_file(path: str) -> torch.Tensor:
-    """Load IQ samples from a ``.npy`` or ``.pt`` file.
+    """Load IQ samples from a ``.npy``, ``.pt`` or ``.c16`` file.
 
     The expected output format is a ``(2, N)`` float tensor where the first
     row contains the real part and the second row contains the imaginary part
     of the IQ signal.  Files that store complex values as a 1-D array are
-    converted to this representation before being returned.
+    converted to this representation before being returned. ``.c16`` files are
+    interpreted as interleaved int16 IQ samples produced by GNU Radio and are
+    scaled to the range [-1, 1).
     """
 
     # Load numpy array or torch tensor from disk
@@ -34,8 +36,13 @@ def load_iq_from_file(path: str) -> torch.Tensor:
             iq_np = tensor.cpu().numpy() if torch.is_tensor(tensor) else np.asarray(tensor)
         else:
             iq_np = data if isinstance(data, np.ndarray) else np.asarray(data)
+    elif path.endswith(".c16"):
+        raw = np.fromfile(path, dtype=np.int16)
+        if raw.size % 2:
+            raise ValueError("IQ stream in .c16 file has odd length")
+        iq_np = raw.astype(np.float32).reshape(-1, 2).T / 32768.0
     else:
-        raise ValueError("Unsupported file format: expected .npy or .pt")
+        raise ValueError("Unsupported file format: expected .npy, .pt or .c16")
 
     # ``iq_np`` might be complex or have shape ``(N, 2)`` – normalise to ``(2, N)``
     if np.iscomplexobj(iq_np):
@@ -54,7 +61,8 @@ def iq_chunks_from_file(path: str, chunk_size: int):
     The returned tensors have shape ``(2, chunk_size)``. For ``.npy`` files the
     array is memory-mapped so only the processed chunk is loaded into RAM. When
     the final chunk is shorter than ``chunk_size`` it is zero-padded on the
-    right so that every yielded tensor has the same length.
+    right so that every yielded tensor has the same length. ``.c16`` files are
+    interpreted as interleaved int16 IQ samples and are scaled to [-1, 1).
     """
 
     if path.endswith(".npy"):
@@ -98,8 +106,19 @@ def iq_chunks_from_file(path: str, chunk_size: int):
             if end - start < chunk_size:
                 chunk = F.pad(chunk, (0, chunk_size - (end - start)))
             yield chunk
+    elif path.endswith(".c16"):
+        raw = np.memmap(path, dtype=np.int16, mode="r")
+        total = raw.size // 2
+        for start in range(0, total, chunk_size):
+            end = min(start + chunk_size, total)
+            slice_ = raw[2 * start : 2 * end].astype(np.float32)
+            chunk = slice_.reshape(-1, 2).T / 32768.0
+            if end - start < chunk_size:
+                pad = ((0, 0), (0, chunk_size - (end - start)))
+                chunk = np.pad(chunk, pad)
+            yield torch.from_numpy(chunk.astype(np.float32))
     else:
-        raise ValueError("Unsupported file format: expected .npy or .pt")
+        raise ValueError("Unsupported file format: expected .npy, .pt or .c16")
 
 
 def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> torch.Tensor:
@@ -132,7 +151,7 @@ def main() -> None:
         ),
     )
     parser.add_argument("--source", choices=["sdr", "file"], required=True, help="Input source")
-    parser.add_argument("--file", help="Path to IQ file (.npy or .pt)")
+    parser.add_argument("--file", help="Path to IQ file (.npy, .pt or .c16)")
     parser.add_argument("--num_samps", type=int, default=1024*1024, help="Number of IQ samples to capture")
     parser.add_argument(
         "--chunk_size",
