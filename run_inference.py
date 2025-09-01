@@ -1,4 +1,6 @@
 import argparse
+import os
+import csv
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -144,9 +146,42 @@ def main() -> None:
     parser.add_argument("--freq", type=float, default=2.4e9, help="SDR center frequency")
     parser.add_argument("--gain", type=float, default=0.0, help="SDR gain")
     parser.add_argument("--device", default="cpu", help="Computation device")
+    parser.add_argument(
+        "--class-names",
+        default=None,
+        help=(
+            "Optional comma-separated list or path to a text file containing "
+            "class names. One class per line when using a file. "
+            "Defaults to names from class_stats.csv if present."
+        ),
+    )
     args = parser.parse_args()
 
     state = torch.load(args.weights, map_location=args.device)
+
+    class_names = None
+    if isinstance(state, dict) and "class_names" in state:
+        class_names = state["class_names"]
+
+    if args.class_names:
+        if os.path.exists(args.class_names):
+            with open(args.class_names, "r") as f:
+                class_names = [line.strip() for line in f if line.strip()]
+        else:
+            class_names = [name.strip() for name in args.class_names.split(",")]
+
+    if class_names is None:
+        for path in ("class_stats.csv", os.path.join("data", "class_stats.csv")):
+            if os.path.exists(path):
+                with open(path, newline="") as f:
+                    reader = csv.reader(f)
+                    header = next(reader)
+                    try:
+                        idx = header.index("class")
+                    except ValueError:
+                        idx = 1 if len(header) > 1 else 0
+                    class_names = [row[idx] for row in reader if len(row) > idx]
+                break
 
     # Convert checkpoint to a state_dict regardless of how it was saved
     if isinstance(state, torch.nn.Module):
@@ -206,8 +241,21 @@ def main() -> None:
             pred_idx = logits.argmax(1).item()
             probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
 
-        print(f"Chunk {i}: Prediction index: {pred_idx}")
-        print("Probabilities:", probs)
+        pred_label = (
+            class_names[pred_idx]
+            if class_names is not None and pred_idx < len(class_names)
+            else str(pred_idx)
+        )
+        print(
+            f"Chunk {i}: Detected {pred_label} "
+            f"({probs[pred_idx]:.2%})"
+        )
+        for j, p in enumerate(probs):
+            label = (
+                class_names[j] if class_names is not None and j < len(class_names) else str(j)
+            )
+            marker = "->" if j == pred_idx else "  "
+            print(f"{marker} {label:<15} {p:.4f}")
 
 
 if __name__ == "__main__":
