@@ -122,7 +122,20 @@ def run(stdscr, args):
 
     state = torch.load(os.path.join(model_dir, model_file), map_location=args.device)
     class_names = state.get("class_names") if isinstance(state, dict) else None
-
+    
+    if class_names is None:
+        for path in ("class_stats.csv", os.path.join("data", "class_stats.csv")):
+            if os.path.exists(path):
+                with open(path, newline="") as f:
+                    reader = csv.reader(f)
+                    header = next(reader)
+                    try:
+                        idx = header.index("class")
+                    except ValueError:
+                        idx = 1 if len(header) > 1 else 0
+                    class_names = [row[idx] for row in reader if len(row) > idx]
+                break
+    
     state_dict = state.state_dict() if isinstance(state, torch.nn.Module) else state
     if "classifier.3.weight" in state_dict:
         num_classes = state_dict["classifier.3.weight"].shape[0]
