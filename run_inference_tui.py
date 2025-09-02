@@ -54,22 +54,41 @@ def _select_from_list(stdscr, title, items):
             idx = (idx + 1) % len(items)
 
 
+def _psd(nfft: int, samples: np.ndarray) -> np.ndarray:
+    """Return the power spectral density of ``samples``."""
+    window = np.hamming(nfft)
+    result = np.multiply(window, samples[:nfft])
+    result = np.fft.fftshift(np.fft.fft(result, nfft))
+    result = np.square(np.abs(result))
+    # Avoid log of zero by adding a tiny value
+    result = np.nan_to_num(10.0 * np.log10(result + 1e-12))
+    return result
+
+
 def _fft_graph(win, iq, height, width):
-    """Draw a simple FFT magnitude graph of ``iq`` into ``win``."""
+    """Draw an FFT magnitude graph of ``iq`` into ``win``."""
     iq_np = iq.cpu().numpy()
-    fft_vals = np.fft.fft(iq_np[0] + 1j * iq_np[1])
-    mag = np.abs(fft_vals)[: len(fft_vals) // 2]
-    if mag.max() == 0:
-        mag = mag + 1e-6
-    step = max(1, len(mag) // width)
-    scaled = mag[::step]
-    max_val = scaled.max()
-    for x in range(min(width, len(scaled))):
-        bar = int(scaled[x] / max_val * (height - 1))
-        for y in range(height):
-            ch = ord("█") if y >= height - bar else ord(" ")
+    samples = iq_np[0] + 1j * iq_np[1]
+
+    nfft = min(len(samples), width)
+    bins = _psd(nfft, samples)
+
+    # Determine dynamic range relative to the strongest bin
+    dyn = 60.0
+    max_val = bins.max()
+    min_val = max_val - dyn
+    if max_val == min_val:
+        min_val = max_val - 1.0
+
+    for x in range(nfft):
+        val = bins[x]
+        # Clip to the selected dynamic range
+        val = min(max_val, max(min_val, val))
+        bar = int((val - min_val) / dyn * (height - 1))
+        start_row = height - bar
+        for y in range(start_row, height):
             try:
-                win.addch(y, x, ch)
+                win.addch(y, x, ord("*"))
             except curses.error:
                 pass
 
