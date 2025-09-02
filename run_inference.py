@@ -183,7 +183,7 @@ def iq_chunks_from_sdr(chunk_size: int, rate: float, freq: float, gain: float):
 
     usrp = uhd.usrp.MultiUSRP()
     usrp.set_rx_rate(rate)
-    usrp.set_rx_freq(uhd.libpyuhd.types.tune_request(freq))
+    usrp.set_rx_freq(freq)
     usrp.set_rx_gain(gain)
 
     stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
