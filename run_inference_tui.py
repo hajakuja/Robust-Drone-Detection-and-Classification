@@ -8,6 +8,17 @@ from load_dataset import transform_spectrogram
 import run_inference
 from run_inference import iq_chunks_from_sdr
 
+# ``model_VGG2D`` performs five successive max pooling operations. Each reduces
+# the spectrogram's time dimension by a factor of two, so we require at least
+# 32 frames to avoid shrinking to zero. With the current spectrogram settings
+# (n_fft = hop_length = 1024) this translates to a minimum chunk size of 32 *
+# 1024 samples.
+MIN_CHUNK_SIZE = 32 * 1024
+
+# Models in this repository were trained with chunks of 1,048,576 IQ samples.
+# Using the same size by default avoids shape mismatches during inference.
+DEFAULT_CHUNK_SIZE = 1024 * 1024
+
 # Ensure torch can deserialize the VGG model
 # run_inference already registers safe globals, but include here for clarity
 torch.serialization.add_safe_globals([model_VGG2D.VGG])
@@ -76,7 +87,19 @@ def run(stdscr, args):
     rate = float(_get_input(stdscr, len(models) + 2, "Sample rate", "14e6"))
     freq = float(_get_input(stdscr, len(models) + 3, "Center frequency", "2.4e9"))
     gain = float(_get_input(stdscr, len(models) + 4, "Gain", "0"))
-    chunk_size = int(_get_input(stdscr, len(models) + 5, "Chunk size", "4096"))
+    chunk_size = int(
+        _get_input(
+            stdscr,
+            len(models) + 5,
+            "Chunk size",
+            str(DEFAULT_CHUNK_SIZE),
+        )
+    )
+
+    # Ensure the chunk size is large enough for the VGG model. Smaller spectrograms
+    # would shrink to zero after successive pooling operations and crash the model.
+    if chunk_size < MIN_CHUNK_SIZE:
+        chunk_size = MIN_CHUNK_SIZE
 
     state = torch.load(os.path.join(model_dir, model_file), map_location=args.device)
     class_names = state.get("class_names") if isinstance(state, dict) else None
