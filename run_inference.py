@@ -185,6 +185,8 @@ def iq_chunks_from_sdr(chunk_size: int, rate: float, freq: float, gain: float):
     usrp.set_rx_rate(rate)
     usrp.set_rx_freq(freq)
     usrp.set_rx_gain(gain)
+    #TODO(uran): This should be temporary, better sol. would be to display the available antennas and allow for choice
+    usrp.set_rx_antenna("TX/RX")
 
     stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
     rx_stream = usrp.get_rx_stream(stream_args)
