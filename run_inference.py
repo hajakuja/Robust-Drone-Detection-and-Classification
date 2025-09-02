@@ -170,6 +170,53 @@ def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> t
     return torch.from_numpy(iq_np).float()
 
 
+def iq_chunks_from_sdr(chunk_size: int, rate: float, freq: float, gain: float):
+    """Yield IQ samples from an SDR in chunks of ``chunk_size`` samples.
+
+    Streaming is started in continuous mode and samples are collected until the
+    caller stops iteration.  Each yielded tensor has shape ``(2, chunk_size)``;
+    if the radio provides fewer samples than requested the remainder is padded
+    with zeros.
+    """
+
+    import uhd
+
+    usrp = uhd.usrp.MultiUSRP()
+    usrp.set_rx_rate(rate)
+    usrp.set_rx_freq(uhd.libpyuhd.types.tune_request(freq))
+    usrp.set_rx_gain(gain)
+
+    stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
+    rx_stream = usrp.get_rx_stream(stream_args)
+    md = uhd.types.RXMetadata()
+
+    stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
+    stream_cmd.stream_now = True
+    rx_stream.issue_stream_cmd(stream_cmd)
+
+    timeout = chunk_size / rate + 0.1
+
+    try:
+        while True:
+            buff = np.empty((chunk_size,), dtype=np.complex64)
+            total = 0
+            while total < chunk_size:
+                num_rx = rx_stream.recv(buff[total:], md, timeout=timeout)
+                if num_rx <= 0:
+                    break
+                total += num_rx
+            if total == 0:
+                break
+            iq_np = np.vstack((buff[:total].real, buff[:total].imag))
+            if total < chunk_size:
+                pad = ((0, 0), (0, chunk_size - total))
+                iq_np = np.pad(iq_np, pad)
+            yield torch.from_numpy(iq_np).float()
+    finally:
+        stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
+        rx_stream.issue_stream_cmd(stop_cmd)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run model inference on SDR or file input")
     parser.add_argument("--weights", required=True, help="Path to model weights (.pth)")
@@ -189,7 +236,12 @@ def main() -> None:
         "--chunk_size",
         type=int,
         default=1024 * 1024,
-        help="Number of IQ samples per inference chunk when reading from a file",
+        help="Number of IQ samples per inference chunk when reading from a file or in continuous SDR mode",
+    )
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Continuously read from the SDR in chunks of --chunk_size",
     )
     parser.add_argument("--rate", type=float, default=14e6, help="SDR sample rate")
     parser.add_argument("--freq", type=float, default=2.4e9, help="SDR center frequency")
@@ -278,33 +330,39 @@ def main() -> None:
             raise ValueError("--file path required when source is 'file'")
         iq_iter = iq_chunks_from_file(args.file, args.chunk_size)
     else:
-        iq_full = capture_from_sdr(args.num_samps, args.rate, args.freq, args.gain)
-        iq_iter = [iq_full]
+        if args.continuous:
+            iq_iter = iq_chunks_from_sdr(args.chunk_size, args.rate, args.freq, args.gain)
+        else:
+            iq_full = capture_from_sdr(args.num_samps, args.rate, args.freq, args.gain)
+            iq_iter = [iq_full]
 
-    for i, iq in enumerate(iq_iter):
-        iq = iq.to(args.device)
-        spec = transform(iq).unsqueeze(0)  # (1, 2, 1024, 1024)
+    try:
+        for i, iq in enumerate(iq_iter):
+            iq = iq.to(args.device)
+            spec = transform(iq).unsqueeze(0)  # (1, 2, 1024, 1024)
 
-        with torch.no_grad():
-            logits = model(spec)
-            pred_idx = logits.argmax(1).item()
-            probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
+            with torch.no_grad():
+                logits = model(spec)
+                pred_idx = logits.argmax(1).item()
+                probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
 
-        pred_label = (
-            class_names[pred_idx]
-            if class_names is not None and pred_idx < len(class_names)
-            else str(pred_idx)
-        )
-        print(
-            f"Chunk {i}: Detected {pred_label} "
-            f"({probs[pred_idx]:.2%})"
-        )
-        for j, p in enumerate(probs):
-            label = (
-                class_names[j] if class_names is not None and j < len(class_names) else str(j)
+            pred_label = (
+                class_names[pred_idx]
+                if class_names is not None and pred_idx < len(class_names)
+                else str(pred_idx)
             )
-            marker = "->" if j == pred_idx else "  "
-            print(f"{marker} {label:<15} {p:.4f}")
+            print(
+                f"Chunk {i}: Detected {pred_label} "
+                f"({probs[pred_idx]:.2%})"
+            )
+            for j, p in enumerate(probs):
+                label = (
+                    class_names[j] if class_names is not None and j < len(class_names) else str(j)
+                )
+                marker = "->" if j == pred_idx else "  "
+                print(f"{marker} {label:<15} {p:.4f}")
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
