@@ -1,6 +1,9 @@
 import argparse
 import os
 import csv
+import threading
+import time
+from collections import deque
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -170,6 +173,37 @@ def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> t
     return torch.from_numpy(iq_np).float()
 
 
+class SdrCaptureBuffer:
+    """Continuously read samples from ``rx_stream`` into a deque."""
+
+    def __init__(self, rx_stream, rate: float, chunk_size: int):
+        import uhd
+
+        self.rx_stream = rx_stream
+        self.md = uhd.types.RXMetadata()
+        self.buff_size = chunk_size
+        # allow a few chunks worth of backlog before dropping samples
+        self.queue: deque = deque(maxlen=chunk_size * 10)
+        self.timeout = chunk_size / rate + 0.1
+        self._stop = threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self) -> None:
+        buff = np.empty((self.buff_size,), dtype=np.complex64)
+        while not self._stop.is_set():
+            num_rx = self.rx_stream.recv(buff, self.md, timeout=self.timeout)
+            if num_rx > 0:
+                # append individual samples to the deque
+                self.queue.extend(buff[:num_rx])
+            else:
+                time.sleep(0.001)
+
+    def stop(self) -> None:
+        self._stop.set()
+        self.thread.join()
+
+
 def iq_chunks_from_sdr(chunk_size: int, rate: float, freq: float, gain: float):
     """Yield IQ samples from an SDR in chunks of ``chunk_size`` samples.
 
@@ -185,38 +219,29 @@ def iq_chunks_from_sdr(chunk_size: int, rate: float, freq: float, gain: float):
     usrp.set_rx_rate(rate)
     usrp.set_rx_freq(freq)
     usrp.set_rx_gain(gain)
-    #TODO(uran): This should be temporary, better sol. would be to display the available antennas and allow for choice
+    # TODO(uran): This should be temporary, better sol. would be to display the available antennas and allow for choice
     usrp.set_rx_antenna("TX/RX")
 
     stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
     rx_stream = usrp.get_rx_stream(stream_args)
-    md = uhd.types.RXMetadata()
 
     stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
     stream_cmd.stream_now = True
     rx_stream.issue_stream_cmd(stream_cmd)
 
-    timeout = chunk_size / rate + 0.1
+    capture = SdrCaptureBuffer(rx_stream, rate, chunk_size)
 
     try:
         while True:
-            buff = np.empty((chunk_size,), dtype=np.complex64)
-            total = 0
-            while total < chunk_size:
-                num_rx = rx_stream.recv(buff[total:], md, timeout=timeout)
-                if num_rx <= 0:
-                    break
-                total += num_rx
-            if total == 0:
-                break
-            iq_np = np.vstack((buff[:total].real, buff[:total].imag))
-            if total < chunk_size:
-                pad = ((0, 0), (0, chunk_size - total))
-                iq_np = np.pad(iq_np, pad)
+            while len(capture.queue) < chunk_size:
+                time.sleep(0.001)
+            samp = np.array([capture.queue.popleft() for _ in range(chunk_size)], dtype=np.complex64)
+            iq_np = np.vstack((samp.real, samp.imag))
             yield torch.from_numpy(iq_np).float()
     finally:
         stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
         rx_stream.issue_stream_cmd(stop_cmd)
+        capture.stop()
 
 
 def main() -> None:
