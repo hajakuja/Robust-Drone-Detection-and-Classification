@@ -325,7 +325,19 @@ def main() -> None:
     model.to(args.device)
     model.eval()
 
-    transform = transform_spectrogram(device=args.device)
+    # Use the exact same spectrogram configuration as during training to avoid
+    # any mismatch between the training and inference pipelines.
+    transform = transform_spectrogram(
+        device=args.device,
+        n_fft=1024,
+        win_length=1024,
+        hop_length=1024,
+        window_fn=torch.hann_window,
+        power=None,
+        normalized=False,
+        center=False,
+        onesided=False,
+    )
 
     if args.source == "file":
         if not args.file:
