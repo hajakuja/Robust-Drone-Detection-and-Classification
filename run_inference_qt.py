@@ -58,6 +58,7 @@ class InferenceThread(QtCore.QThread):
 
     def stop(self) -> None:
         self._stop = True
+
         # Close the IQ iterator if it supports it to release resources
         close = getattr(self.iq_iter, "close", None)
         if callable(close):
@@ -109,6 +110,7 @@ def main() -> None:
     parser.add_argument("--freq", type=float, default=2.4e9, help="SDR center frequency")
     parser.add_argument("--gain", type=float, default=0.0, help="SDR gain")
     parser.add_argument("--antenna", default="TX/RX", help="SDR antenna selection")
+
     parser.add_argument(
         "--continuous",
         action="store_true",
