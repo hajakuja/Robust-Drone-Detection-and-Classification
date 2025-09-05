@@ -7,3 +7,4 @@ torch==2.4.0+cu124
 torchaudio==2.4.0+cu124
 torchmetrics==1.4.0.post0
 tqdm==4.66.4
+PyQt5==5.15.11
