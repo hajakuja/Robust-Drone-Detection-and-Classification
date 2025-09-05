@@ -412,7 +412,7 @@ def main() -> None:
             label = " "
             if class_names is not None:
                 label = "Noise" if class_names[pred_idx] == "Noise" else "Drone DETECTED!" 
-            print(f"{i} {label:<15} {probs[pred_idx]:.4f}")
+            print(f"{i}. {label:<15} {probs[pred_idx]:.4f}")
     except KeyboardInterrupt:
         pass
 
