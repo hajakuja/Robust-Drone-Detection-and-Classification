@@ -396,21 +396,24 @@ def main() -> None:
                 pred_idx = logits.argmax(1).item()
                 probs = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
 
-            pred_label = (
-                class_names[pred_idx]
-                if class_names is not None and pred_idx < len(class_names)
-                else str(pred_idx)
-            )
-            print(
-                f"Chunk {i}: Detected {pred_label} "
-                f"({probs[pred_idx]:.2%})"
-            )
-            for j, p in enumerate(probs):
-                label = (
-                    class_names[j] if class_names is not None and j < len(class_names) else str(j)
-                )
-                marker = "->" if j == pred_idx else "  "
-                print(f"{marker} {label:<15} {p:.4f}")
+            # pred_label = (
+            #     class_names[pred_idx]
+            #     if class_names is not None and pred_idx < len(class_names)
+            #     else str(pred_idx)
+            # )
+            # print(
+            #     f"Chunk {i}: Detected {pred_label} "
+            #     f"({probs[pred_idx]:.2%})"
+            # )
+            # for j, p in enumerate(probs):
+                # label = (
+                    # class_names[j] if class_names is not None and j < len(class_names) else str(j)
+                # )
+            label = " "
+            if class_names is not None:
+                label = "Noise" if class_names[pred_idx] == "Noise" else "Drone DETECTED!" 
+            marker = "  "
+            print(f"{marker} {label:<15} {probs[pred_idx]:.4f}")
     except KeyboardInterrupt:
         pass
 
