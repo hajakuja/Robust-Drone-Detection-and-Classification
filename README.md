@@ -74,6 +74,28 @@ The classification report for all SNR levels is stored as `acc.csv` in the same 
 
 The accuracy per SNR level is stored in a file `acc_per_SNR.csv` in the same folder.
 
+## Run inference on live SDR or IQ files
+The script `run_inference.py` can process previously recorded IQ data or stream
+directly from a UHD-compatible SDR. When using an SDR, the antenna port can be
+selected via the new `--antenna` flag. Typical antenna names for a B210 are
+`RX2` and `TX/RX`; the default is `TX/RX`.
+
+Example command:
+
+```bash
+python run_inference.py \
+    --weights results/experiments/model.pth \
+    --source sdr \
+    --rate 14e6 \
+    --freq 2.4e9 \
+    --gain 30 \
+    --antenna RX2
+```
+
+The USRP B210 accepts RX gain values from roughly 0 to 76 dB. In many indoor
+scenarios, settings between 20 and 40 dB provide a good balance between noise
+and sensitivity.
+
 ## Tensorboard
 During training several metrics are logged to tensorboard. To start tensorboard run the following command:
 ```bash
