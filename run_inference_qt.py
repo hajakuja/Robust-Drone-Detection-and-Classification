@@ -25,7 +25,7 @@ torch.serialization.add_safe_globals([torch.nn.modules.dropout.Dropout])
 class InferenceThread(QtCore.QThread):
     """Worker thread that yields spectrograms and predictions."""
 
-    new_result = QtCore.pyqtSignal(np.ndarray, str)
+    new_result = QtCore.pyqtSignal(np.ndarray, str, float)
 
     def __init__(self, iq_iter, model, transform, class_names, device):
         super().__init__()
@@ -45,14 +45,16 @@ class InferenceThread(QtCore.QThread):
                 spec = self.transform(iq).unsqueeze(0)  # (1, 2, 1024, 1024)
                 with torch.no_grad():
                     logits = self.model(spec)
+                    probs = torch.softmax(logits, dim=1)
                     pred_idx = logits.argmax(1).item()
+                    pred_prob = probs[0, pred_idx].item()
                     pred_label = (
                         self.class_names[pred_idx]
                         if self.class_names is not None and pred_idx < len(self.class_names)
                         else str(pred_idx)
                     )
                 img = spec[0].pow(2).sum(0).sqrt().cpu().numpy()
-                self.new_result.emit(img, pred_label)
+                self.new_result.emit(img, pred_label, pred_prob)
         except Exception:
             pass  # Suppress exceptions on shutdown
 
@@ -71,18 +73,22 @@ class InferenceThread(QtCore.QThread):
 class SpectrogramWindow(QtWidgets.QWidget):
     """Main application window displaying the spectrogram."""
 
-    def __init__(self):
+    def __init__(self, spec_width: int, spec_height: int):
         super().__init__()
         self.setWindowTitle("Live Spectrogram")
-        self.resize(600, 600)
         layout = QtWidgets.QVBoxLayout(self)
         self.image_label = QtWidgets.QLabel(alignment=QtCore.Qt.AlignCenter)
-        layout.addWidget(self.image_label)
+        self.image_label.setMinimumSize(spec_width, spec_height)
+        self.image_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+        )
+        layout.addWidget(self.image_label, stretch=1)
         self.pred_label = QtWidgets.QLabel("Prediction: ")
         layout.addWidget(self.pred_label)
+        self.resize(spec_width, spec_height + self.pred_label.sizeHint().height())
 
-    @QtCore.pyqtSlot(np.ndarray, str)
-    def update_display(self, img: np.ndarray, label: str) -> None:
+    @QtCore.pyqtSlot(np.ndarray, str, float)
+    def update_display(self, img: np.ndarray, label: str, prob: float) -> None:
         # Normalise and convert to 8-bit grayscale
         img = img - img.min()
         if img.max() > 0:
@@ -91,12 +97,13 @@ class SpectrogramWindow(QtWidgets.QWidget):
         h, w = img.shape
         qimg = QtGui.QImage(img.data, w, h, w, QtGui.QImage.Format_Grayscale8).copy()
         pix = QtGui.QPixmap.fromImage(qimg).scaled(
-            self.image_label.width(),
-            self.image_label.height(),
+            self.image_label.size(),
             QtCore.Qt.KeepAspectRatio,
+            QtCore.Qt.SmoothTransformation,
         )
         self.image_label.setPixmap(pix)
-        self.pred_label.setText(f"Prediction: {label}")
+        display_label = "noise" if label.lower() == "noise" else "drone detected"
+        self.pred_label.setText(f"Prediction: {display_label} ({prob:.2f})")
 
 
 def main() -> None:
@@ -117,6 +124,14 @@ def main() -> None:
         help="Continuously read from the SDR in chunks of --chunk_size",
     )
     parser.add_argument("--device", default="cpu", help="Computation device")
+    parser.add_argument(
+        "--spectrogram-size",
+        type=int,
+        nargs=2,
+        metavar=("WIDTH", "HEIGHT"),
+        default=(800, 800),
+        help="Spectrogram image size in pixels",
+    )
     args = parser.parse_args()
 
     state = torch.load(args.weights, map_location=args.device)
@@ -176,7 +191,7 @@ def main() -> None:
             iq_iter = [iq_full]
 
     app = QtWidgets.QApplication([])
-    window = SpectrogramWindow()
+    window = SpectrogramWindow(*args.spectrogram_size)
     worker = InferenceThread(iq_iter, model, transform, class_names, args.device)
     worker.new_result.connect(window.update_display)
     worker.start()
