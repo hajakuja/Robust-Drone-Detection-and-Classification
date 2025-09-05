@@ -59,6 +59,14 @@ class InferenceThread(QtCore.QThread):
     def stop(self) -> None:
         self._stop = True
 
+        # Close the IQ iterator if it supports it to release resources
+        close = getattr(self.iq_iter, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+
 
 class SpectrogramWindow(QtWidgets.QWidget):
     """Main application window displaying the spectrogram."""
@@ -102,6 +110,12 @@ def main() -> None:
     parser.add_argument("--freq", type=float, default=2.4e9, help="SDR center frequency")
     parser.add_argument("--gain", type=float, default=0.0, help="SDR gain")
     parser.add_argument("--antenna", default="TX/RX", help="SDR antenna selection")
+
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Continuously read from the SDR in chunks of --chunk_size",
+    )
     parser.add_argument("--device", default="cpu", help="Computation device")
     args = parser.parse_args()
 
@@ -151,10 +165,15 @@ def main() -> None:
             raise ValueError("--file path required when source is 'file'")
         iq_iter = run_inference.iq_chunks_from_file(args.file, args.chunk_size)
     else:
-        iq_full = run_inference.capture_from_sdr(
-            args.num_samps, args.rate, args.freq, args.gain, args.antenna
-        )
-        iq_iter = [iq_full]
+        if args.continuous:
+            iq_iter = run_inference.iq_chunks_from_sdr(
+                args.chunk_size, args.rate, args.freq, args.gain, args.antenna
+            )
+        else:
+            iq_full = run_inference.capture_from_sdr(
+                args.num_samps, args.rate, args.freq, args.gain, args.antenna
+            )
+            iq_iter = [iq_full]
 
     app = QtWidgets.QApplication([])
     window = SpectrogramWindow()
