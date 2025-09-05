@@ -126,15 +126,17 @@ def iq_chunks_from_file(path: str, chunk_size: int):
         raise ValueError("Unsupported file format: expected .npy, .pt or .c16")
 
 
-def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> torch.Tensor:
+def capture_from_sdr(
+    num_samps: int, rate: float, freq: float, gain: float, antenna: str
+) -> torch.Tensor:
     """Capture IQ samples from a UHD-compatible SDR.
 
-    Previously the function issued a single ``recv`` call without first
-    starting the stream.  On some devices this resulted in zero samples
-    being returned, which later caused spectrogram generation to fail.  The
-    revised implementation explicitly issues a stream command and keeps
-    receiving until either the requested number of samples has been
-    collected or the radio stops producing data.
+    The antenna port is selected via ``antenna``. Previously the function
+    issued a single ``recv`` call without first starting the stream. On some
+    devices this resulted in zero samples being returned, which later caused
+    spectrogram generation to fail. The revised implementation explicitly
+    issues a stream command and keeps receiving until either the requested
+    number of samples has been collected or the radio stops producing data.
     """
 
     import uhd
@@ -144,6 +146,7 @@ def capture_from_sdr(num_samps: int, rate: float, freq: float, gain: float) -> t
     usrp.set_rx_rate(rate)
     usrp.set_rx_freq(uhd.libpyuhd.types.tune_request(freq))
     usrp.set_rx_gain(gain)
+    usrp.set_rx_antenna(antenna)
 
     # Create the RX stream
     stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
@@ -204,23 +207,24 @@ class SdrCaptureBuffer:
         self.thread.join()
 
 
-def iq_chunks_from_sdr(chunk_size: int, rate: float, freq: float, gain: float):
+def iq_chunks_from_sdr(
+    chunk_size: int, rate: float, freq: float, gain: float, antenna: str
+):
     """Yield IQ samples from an SDR in chunks of ``chunk_size`` samples.
 
     Streaming is started in continuous mode and samples are collected until the
-    caller stops iteration.  Each yielded tensor has shape ``(2, chunk_size)``;
-    if the radio provides fewer samples than requested the remainder is padded
-    with zeros.
+    caller stops iteration. The ``antenna`` parameter selects the RF port. Each
+    yielded tensor has shape ``(2, chunk_size)``; if the radio provides fewer
+    samples than requested the remainder is padded with zeros.
     """
 
     import uhd
 
     usrp = uhd.usrp.MultiUSRP()
     usrp.set_rx_rate(rate)
-    usrp.set_rx_freq(freq)
+    usrp.set_rx_freq(uhd.libpyuhd.types.tune_request(freq))
     usrp.set_rx_gain(gain)
-    # TODO(uran): This should be temporary, better sol. would be to display the available antennas and allow for choice
-    usrp.set_rx_antenna("TX/RX")
+    usrp.set_rx_antenna(antenna)
 
     stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
     rx_stream = usrp.get_rx_stream(stream_args)
@@ -273,6 +277,9 @@ def main() -> None:
     parser.add_argument("--rate", type=float, default=14e6, help="SDR sample rate")
     parser.add_argument("--freq", type=float, default=2.4e9, help="SDR center frequency")
     parser.add_argument("--gain", type=float, default=0.0, help="SDR gain")
+    parser.add_argument(
+        "--antenna", default="TX/RX", help="SDR antenna selection"
+    )
     parser.add_argument("--device", default="cpu", help="Computation device")
     parser.add_argument(
         "--class-names",
@@ -370,9 +377,13 @@ def main() -> None:
         iq_iter = iq_chunks_from_file(args.file, args.chunk_size)
     else:
         if args.continuous:
-            iq_iter = iq_chunks_from_sdr(args.chunk_size, args.rate, args.freq, args.gain)
+            iq_iter = iq_chunks_from_sdr(
+                args.chunk_size, args.rate, args.freq, args.gain, args.antenna
+            )
         else:
-            iq_full = capture_from_sdr(args.num_samps, args.rate, args.freq, args.gain)
+            iq_full = capture_from_sdr(
+                args.num_samps, args.rate, args.freq, args.gain, args.antenna
+            )
             iq_iter = [iq_full]
 
     try:

@@ -107,10 +107,11 @@ def run(stdscr, args):
     rate = float(_get_input(stdscr, len(models) + 2, "Sample rate", "14e6"))
     freq = float(_get_input(stdscr, len(models) + 3, "Center frequency", "2.4e9"))
     gain = float(_get_input(stdscr, len(models) + 4, "Gain", "0"))
+    antenna = _get_input(stdscr, len(models) + 5, "Antenna", "TX/RX")
     chunk_size = int(
         _get_input(
             stdscr,
-            len(models) + 5,
+            len(models) + 6,
             "Chunk size",
             str(DEFAULT_CHUNK_SIZE),
         )
@@ -154,7 +155,7 @@ def run(stdscr, args):
     model.eval()
 
     transform = transform_spectrogram(device=args.device)
-    iq_iter = iq_chunks_from_sdr(chunk_size, rate, freq, gain)
+    iq_iter = iq_chunks_from_sdr(chunk_size, rate, freq, gain, antenna)
 
     height, width = stdscr.getmaxyx()
     prob_lines = len(class_names) + 2
