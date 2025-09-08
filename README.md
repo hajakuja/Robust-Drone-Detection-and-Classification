@@ -10,6 +10,9 @@ This repository was cloned from [the original authors!](!https://github.com/sglu
 ### Requirements
 - [PyTorch](https://pytorch.org/) is required for loading the trained model and running inference.
 - [UHD](https://github.com/EttusResearch/uhd) drivers are needed to interface with USRP SDR hardware.
+- To actually run with the LibreSDR you need the firmware and bootloader located in [Gargoyle's Drive](!https://drive.google.com/drive/u/0/folders/1COamB_a2Bg5ggDWPynG69MCTEX21ZvTo)
+- The pre-trained weights are also located in [Gargoyle's Drive](!https://drive.google.com/file/d/1yXM_R6BPF1eZlcainm6QYwOgNXnVasXs/view?usp=drive_link)
+- Also pre-recorded I/Q samples are located [here](!https://drive.google.com/drive/u/0/folders/1QO-uxldw1FwpNfhTmhcEP1NpHBNKlaJc)
 
 ### Usage
 
