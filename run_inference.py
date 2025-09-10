@@ -31,9 +31,11 @@ def load_iq_from_file(path: str) -> torch.Tensor:
     scaled to the range [-1, 1).
     """
 
-    # Load numpy array or torch tensor from disk
+    # Load numpy array or torch tensor from disk.  ``np.load`` is invoked with
+    # ``mmap_mode='r'`` so that even very large capture files can be accessed
+    # without first loading the entire array into RAM.
     if path.endswith(".npy"):
-        iq_np = np.load(path)
+        iq_np = np.load(path, mmap_mode="r")
     elif path.endswith(".pt"):
         data = torch.load(path)
         if isinstance(data, dict) and "x_iq" in data:
@@ -57,7 +59,7 @@ def load_iq_from_file(path: str) -> torch.Tensor:
     elif iq_np.ndim == 1:
         raise ValueError("IQ data must be complex or a (2, N) array")
 
-    return torch.from_numpy(iq_np.astype(np.float32))
+    return torch.from_numpy(iq_np.astype(np.float32, copy=False))
 
 
 def iq_chunks_from_file(path: str, chunk_size: int):
@@ -80,7 +82,7 @@ def iq_chunks_from_file(path: str, chunk_size: int):
                 if end - start < chunk_size:
                     pad = ((0, 0), (0, chunk_size - (end - start)))
                     chunk = np.pad(chunk, pad)
-                yield torch.from_numpy(chunk.astype(np.float32))
+                yield torch.from_numpy(chunk.astype(np.float32, copy=False))
         else:
             if iq_np.ndim == 2 and iq_np.shape[0] == 2:
                 total = iq_np.shape[1]
@@ -90,7 +92,7 @@ def iq_chunks_from_file(path: str, chunk_size: int):
                     if end - start < chunk_size:
                         pad = ((0, 0), (0, chunk_size - (end - start)))
                         chunk = np.pad(chunk, pad)
-                    yield torch.from_numpy(chunk.astype(np.float32))
+                    yield torch.from_numpy(chunk.astype(np.float32, copy=False))
             elif iq_np.ndim == 2 and iq_np.shape[1] == 2:
                 total = iq_np.shape[0]
                 for start in range(0, total, chunk_size):
@@ -99,7 +101,7 @@ def iq_chunks_from_file(path: str, chunk_size: int):
                     if end - start < chunk_size:
                         pad = ((0, 0), (0, chunk_size - (end - start)))
                         chunk = np.pad(chunk, pad)
-                    yield torch.from_numpy(chunk.astype(np.float32))
+                    yield torch.from_numpy(chunk.astype(np.float32, copy=False))
             else:
                 raise ValueError("Unsupported IQ array shape in npy file")
     elif path.endswith(".pt"):
@@ -116,12 +118,12 @@ def iq_chunks_from_file(path: str, chunk_size: int):
         total = raw.size // 2
         for start in range(0, total, chunk_size):
             end = min(start + chunk_size, total)
-            slice_ = raw[2 * start : 2 * end].astype(np.float32)
+            slice_ = raw[2 * start : 2 * end].astype(np.float32, copy=False)
             chunk = slice_.reshape(-1, 2).T / 32768.0
             if end - start < chunk_size:
                 pad = ((0, 0), (0, chunk_size - (end - start)))
                 chunk = np.pad(chunk, pad)
-            yield torch.from_numpy(chunk.astype(np.float32))
+            yield torch.from_numpy(chunk.astype(np.float32, copy=False))
     else:
         raise ValueError("Unsupported file format: expected .npy, .pt or .c16")
 
