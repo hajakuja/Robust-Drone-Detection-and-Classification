@@ -20,7 +20,7 @@ torch.serialization.add_safe_globals([torch.nn.modules.pooling.AdaptiveAvgPool2d
 torch.serialization.add_safe_globals([torch.nn.modules.linear.Linear])
 torch.serialization.add_safe_globals([torch.nn.modules.dropout.Dropout])
 
-def load_iq_from_file(path: str) -> torch.Tensor:
+def load_iq_from_file(path: str, npy_int16: bool = False) -> torch.Tensor:
     """Load IQ samples from a ``.npy``, ``.pt`` or ``.c16`` file.
 
     The expected output format is a ``(2, N)`` float tensor where the first
@@ -28,14 +28,22 @@ def load_iq_from_file(path: str) -> torch.Tensor:
     of the IQ signal.  Files that store complex values as a 1-D array are
     converted to this representation before being returned. ``.c16`` files are
     interpreted as interleaved int16 IQ samples produced by GNU Radio and are
-    scaled to the range [-1, 1).
+    scaled to the range [-1, 1).  When ``npy_int16`` is ``True`` ``.npy`` files
+    are also interpreted as raw interleaved int16 IQ samples without a NumPy
+    header – useful for captures recorded with ``stream_args('fc32','sc16')``
+    that have been saved with a ``.npy`` extension.
     """
 
     # Load numpy array or torch tensor from disk.  ``np.load`` is invoked with
     # ``mmap_mode='r'`` so that even very large capture files can be accessed
     # without first loading the entire array into RAM.
-    if path.endswith(".npy"):
+    if path.endswith(".npy") and not npy_int16:
         iq_np = np.load(path, mmap_mode="r")
+    elif path.endswith(".npy") and npy_int16:
+        raw = np.fromfile(path, dtype=np.int16)
+        if raw.size % 2:
+            raise ValueError("IQ stream in npy file has odd length")
+        iq_np = raw.astype(np.float32).reshape(-1, 2).T / 32768.0
     elif path.endswith(".pt"):
         data = torch.load(path)
         if isinstance(data, dict) and "x_iq" in data:
@@ -62,17 +70,19 @@ def load_iq_from_file(path: str) -> torch.Tensor:
     return torch.from_numpy(iq_np.astype(np.float32, copy=False))
 
 
-def iq_chunks_from_file(path: str, chunk_size: int):
+def iq_chunks_from_file(path: str, chunk_size: int, npy_int16: bool = False):
     """Yield IQ samples from ``path`` in chunks of ``chunk_size`` samples.
 
     The returned tensors have shape ``(2, chunk_size)``. For ``.npy`` files the
     array is memory-mapped so only the processed chunk is loaded into RAM. When
     the final chunk is shorter than ``chunk_size`` it is zero-padded on the
     right so that every yielded tensor has the same length. ``.c16`` files are
-    interpreted as interleaved int16 IQ samples and are scaled to [-1, 1).
+    interpreted as interleaved int16 IQ samples and are scaled to [-1, 1).  When
+    ``npy_int16`` is ``True`` ``.npy`` files are parsed as raw interleaved
+    int16 IQ samples in the same way as ``.c16`` files.
     """
 
-    if path.endswith(".npy"):
+    if path.endswith(".npy") and not npy_int16:
         iq_np = np.load(path, mmap_mode="r")
         if np.iscomplexobj(iq_np):
             total = iq_np.shape[0]
@@ -104,6 +114,17 @@ def iq_chunks_from_file(path: str, chunk_size: int):
                     yield torch.from_numpy(chunk.astype(np.float32, copy=False))
             else:
                 raise ValueError("Unsupported IQ array shape in npy file")
+    elif path.endswith(".npy") and npy_int16:
+        raw = np.memmap(path, dtype=np.int16, mode="r")
+        total = raw.size // 2
+        for start in range(0, total, chunk_size):
+            end = min(start + chunk_size, total)
+            slice_ = raw[2 * start : 2 * end].astype(np.float32, copy=False)
+            chunk = slice_.reshape(-1, 2).T / 32768.0
+            if end - start < chunk_size:
+                pad = ((0, 0), (0, chunk_size - (end - start)))
+                chunk = np.pad(chunk, pad)
+            yield torch.from_numpy(chunk.astype(np.float32, copy=False))
     elif path.endswith(".pt"):
         iq = load_iq_from_file(path)
         total = iq.shape[1]
@@ -264,6 +285,14 @@ def main() -> None:
     )
     parser.add_argument("--source", choices=["sdr", "file"], required=True, help="Input source")
     parser.add_argument("--file", help="Path to IQ file (.npy, .pt or .c16)")
+    parser.add_argument(
+        "--npy-int16",
+        action="store_true",
+        help=(
+            "Treat .npy files as raw interleaved int16 IQ samples "
+            "recorded with stream_args('fc32','sc16')"
+        ),
+    )
     parser.add_argument("--num_samps", type=int, default=1024*1024, help="Number of IQ samples to capture")
     parser.add_argument(
         "--chunk_size",
@@ -376,7 +405,7 @@ def main() -> None:
     if args.source == "file":
         if not args.file:
             raise ValueError("--file path required when source is 'file'")
-        iq_iter = iq_chunks_from_file(args.file, args.chunk_size)
+        iq_iter = iq_chunks_from_file(args.file, args.chunk_size, args.npy_int16)
     else:
         if args.continuous:
             iq_iter = iq_chunks_from_sdr(
