@@ -416,6 +416,7 @@ def main() -> None:
             except Exception:
                 pass
         import matplotlib.pyplot as plt  # noqa: WPS433
+
         plt.ion()
         fig, ax = plt.subplots()
 
