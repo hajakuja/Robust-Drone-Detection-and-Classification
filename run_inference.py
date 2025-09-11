@@ -7,6 +7,7 @@ from collections import deque
 import numpy as np
 import torch
 import torch.nn.functional as F
+import matplotlib
 from lib import model_VGG2D
 from load_dataset import transform_spectrogram
 
@@ -321,6 +322,11 @@ def main() -> None:
             "Defaults to names from class_stats.csv if present."
         ),
     )
+    parser.add_argument(
+        "--show-spectrogram",
+        action="store_true",
+        help="Display an updating spectrogram preview for each processed chunk",
+    )
     args = parser.parse_args()
 
     state = torch.load(args.weights, map_location=args.device)
@@ -401,6 +407,17 @@ def main() -> None:
         center=False,
         onesided=False,
     )
+    img = None
+    plt = fig = ax = None
+    if args.show_spectrogram:
+        if matplotlib.get_backend().lower() == "agg":
+            try:
+                matplotlib.use("TkAgg")
+            except Exception:
+                pass
+        import matplotlib.pyplot as plt  # noqa: WPS433
+        plt.ion()
+        fig, ax = plt.subplots()
 
     if args.source == "file":
         if not args.file:
@@ -420,7 +437,19 @@ def main() -> None:
     try:
         for i, iq in enumerate(iq_iter):
             iq = iq.to(args.device)
-            spec = transform(iq).unsqueeze(0)  # (1, 2, 1024, 1024)
+            spec = transform(iq)
+            if args.show_spectrogram and plt is not None:
+                spec_mag = spec.pow(2).sum(dim=0).sqrt().cpu().numpy()
+                if img is None:
+                    img = ax.imshow(spec_mag, origin="lower", aspect="auto")
+                    ax.set_title("Spectrogram")
+                    plt.show(block=False)
+                else:
+                    img.set_data(spec_mag)
+                    img.set_clim(spec_mag.min(), spec_mag.max())
+                fig.canvas.draw_idle()
+                plt.pause(0.001)
+            spec = spec.unsqueeze(0)  # (1, 2, 1024, 1024)
 
             with torch.no_grad():
                 logits = model(spec)
