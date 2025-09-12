@@ -111,6 +111,14 @@ def main() -> None:
     parser.add_argument("--weights", required=True, help="Path to model weights (.pth)")
     parser.add_argument("--source", choices=["sdr", "file"], required=True, help="Input source")
     parser.add_argument("--file", help="Path to IQ file (.npy, .pt or .c16)")
+    parser.add_argument(
+        "--npy-int16",
+        action="store_true",
+        help=(
+            "Treat .npy files as raw interleaved int16 IQ samples "
+            "recorded with stream_args('fc32','sc16')"
+        ),
+    )
     parser.add_argument("--num_samps", type=int, default=1024 * 1024, help="Number of IQ samples to capture")
     parser.add_argument("--chunk_size", type=int, default=1024 * 1024, help="IQ samples per chunk")
     parser.add_argument("--rate", type=float, default=14e6, help="SDR sample rate")
@@ -178,7 +186,9 @@ def main() -> None:
     if args.source == "file":
         if not args.file:
             raise ValueError("--file path required when source is 'file'")
-        iq_iter = run_inference.iq_chunks_from_file(args.file, args.chunk_size)
+        iq_iter = run_inference.iq_chunks_from_file(
+            args.file, args.chunk_size, args.npy_int16
+        )
     else:
         if args.continuous:
             iq_iter = run_inference.iq_chunks_from_sdr(
